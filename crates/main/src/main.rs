@@ -42,6 +42,17 @@ use tikv_jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 fn main() -> std::io::Result<ExitCode> {
+    // KMJ downstream product identity, independent of licensing and server startup.
+    // Handle only a standalone version switch; preserve other CLI behavior.
+    let mut args = std::env::args_os().skip(1);
+    if args.next().is_some_and(|arg| {
+        arg == "--version" || arg == "-V" || arg == "--kmj-version"
+    }) && args.next().is_none()
+    {
+        println!("KMJ Mail Engine {}", env!("CARGO_PKG_VERSION"));
+        return Ok(ExitCode::SUCCESS);
+    }
+
     run_server(async_main())
 }
 

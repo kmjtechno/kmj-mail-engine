@@ -1,0 +1,53 @@
+name: KMJ Community candidate build
+on:
+  pull_request:
+    paths:
+      - 'kmj/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.github/workflows/kmj-community-build.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kmj-community-build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux-community:
+    if: github.repository == 'kmjtechno/kmj-mail-engine'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_NET_RETRY: '3'
+      CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Prepare disposable build runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake clang libclang-dev pkg-config nasm
+          rustup update stable
+          rustup default stable
+          rustc -Vv
+          cargo -V
+      - name: Build and verify actual KMJ Community executable
+        run: |
+          bash kmj/build-community.sh
+          test "$(target/kmj-community/kmj-mail-engine --version)" = "KMJ Mail Engine 1.2.0"
+          test "$(target/kmj-community/kmj-mail-engine --kmj-version)" = "KMJ Mail Engine 1.2.0"
+          sha256sum target/kmj-community/kmj-mail-engine
+          help="$(target/kmj-community/kmj-mail-engine --help 2>&1)"
+          grep -Fq 'KMJ Mail Engine v' <<< "$help"
+          grep -Fq 'Usage: kmj-mail-engine [OPTIONS]' <<< "$help"
+          if grep -iq stalwart <<< "$help"; then
+            echo 'KMJ_HELP_BRANDING=FAIL'
+            exit 2
+          fi
+          echo 'KMJ_HELP_BRANDING=PASS'
+          echo 'KMJ_CANDIDATE_BINARY=BUILT_NOT_SIGNED_NOT_DEPLOYED'
