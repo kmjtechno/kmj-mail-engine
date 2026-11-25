@@ -33,5 +33,10 @@ sha256sum Cargo.lock
 cargo build --locked --release -p stalwart --no-default-features \
   --features postgres,rocks
 test -x target/release/stalwart
-sha256sum target/release/stalwart
+test "$(target/release/stalwart --kmj-version)" = "KMJ Mail Engine (Stalwart Community base $(target/release/stalwart --version))"
+# Separate downstream package name; upstream executable remains intact.
+install -d -m 0755 target/kmj-community
+install -m 0755 target/release/stalwart target/kmj-community/kmj-mail-engine
+target/kmj-community/kmj-mail-engine --kmj-version
+sha256sum target/kmj-community/kmj-mail-engine
 echo 'KMJ_COMMUNITY_BUILD=COMPLETE_NOT_DEPLOYED'

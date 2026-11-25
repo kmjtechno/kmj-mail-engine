@@ -42,6 +42,17 @@ use tikv_jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 fn main() -> std::io::Result<ExitCode> {
+    // KMJ downstream identity: explicit, offline and independent of license state.
+    // Preserve all upstream CLI arguments and the upstream version behavior.
+    let mut args = std::env::args_os().skip(1);
+    if args.next().is_some_and(|arg| arg == "--kmj-version") && args.next().is_none() {
+        println!(
+            "KMJ Mail Engine (Stalwart Community base {})",
+            env!("CARGO_PKG_VERSION")
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+
     run_server(async_main())
 }
 
