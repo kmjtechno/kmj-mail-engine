@@ -452,7 +452,7 @@ impl Session {
 impl Default for SieveSessionCapabilities {
     fn default() -> Self {
         Self {
-            implementation: "Stalwart v1.0.0",
+            implementation: "KMJ Mail Engine",
         }
     }
 }
