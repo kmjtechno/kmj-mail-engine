@@ -1,0 +1,49 @@
+name: KMJ Community source contract
+on:
+  pull_request:
+    paths:
+      - 'kmj/**'
+      - 'crates/main/src/main.rs'
+      - '.github/workflows/kmj-community-source.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    if: github.repository == 'kmjtechno/kmj-mail-engine'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate source identity and build guard
+        run: |
+          bash -n kmj/build-community.sh
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          identity = json.loads(Path('kmj/product-identity.json').read_text())
+          assert identity['product'] == 'KMJ Mail Engine'
+          assert identity['binary'] == 'kmj-mail-engine'
+          assert identity['release']['features'] == ['postgres', 'rocks']
+          assert identity['release']['enterpriseFeatures'] is False
+          source = Path('crates/main/src/main.rs').read_text()
+          assert 'SPDX-FileCopyrightText: 2020 Stalwart Labs LLC' in source
+          assert 'SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-SEL' in source
+          assert 'arg == "--kmj-version"' in source
+          assert 'arg == "--version"' in source
+          assert 'arg == "-V"' in source
+          assert 'println!("KMJ Mail Engine {}", env!("CARGO_PKG_VERSION"))' in source
+          assert 'upstream' not in identity
+          assert 'Stalwart' not in json.dumps(identity)
+          assert Path(identity['legalNotices']).is_file()
+          assert 'run_server(async_main())' in source
+          build = Path('kmj/build-community.sh').read_text()
+          assert '--no-default-features' in build
+          assert '--features postgres,rocks' in build
+          assert 'REFUSED_RESTRICTED_FEATURE' in build
+          assert 'target/kmj-community/kmj-mail-engine' in build
+          assert Path('LICENSES/AGPL-3.0-only.txt').is_file()
+          assert Path('LICENSES/LicenseRef-SEL.txt').is_file()
+          print('KMJ_SOURCE_IDENTITY=PASS_NOT_COMPILED')
+          PY

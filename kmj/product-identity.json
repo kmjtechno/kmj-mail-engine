@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "product": "KMJ Mail Engine",
+  "edition": "Community",
+  "vendor": "KMJ TECHNO",
+  "binary": "kmj-mail-engine",
+  "serviceName": "kmj-mail-engine.service",
+  "versionCommand": "--version",
+  "release": {
+    "status": "source-only",
+    "features": [
+      "postgres",
+      "rocks"
+    ],
+    "enterpriseFeatures": false
+  },
+  "legalNotices": "kmj/UPSTREAM-NOTICES.md"
+}
