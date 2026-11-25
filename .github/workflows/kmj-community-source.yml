@@ -31,6 +31,12 @@ jobs:
           assert 'SPDX-FileCopyrightText: 2020 Stalwart Labs LLC' in source
           assert 'SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-SEL' in source
           assert 'arg == "--kmj-version"' in source
+          assert 'arg == "--version"' in source
+          assert 'arg == "-V"' in source
+          assert 'println!("KMJ Mail Engine {}", env!("CARGO_PKG_VERSION"))' in source
+          assert 'upstream' not in identity
+          assert 'Stalwart' not in json.dumps(identity)
+          assert Path(identity['legalNotices']).is_file()
           assert 'run_server(async_main())' in source
           build = Path('kmj/build-community.sh').read_text()
           assert '--no-default-features' in build

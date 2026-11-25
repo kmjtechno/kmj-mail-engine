@@ -5,13 +5,7 @@
   "vendor": "KMJ TECHNO",
   "binary": "kmj-mail-engine",
   "serviceName": "kmj-mail-engine.service",
-  "versionCommand": "--kmj-version",
-  "upstream": {
-    "name": "Stalwart",
-    "repository": "https://github.com/stalwartlabs/stalwart",
-    "license": "AGPL-3.0-only (Community code)",
-    "notices": "LICENSES"
-  },
+  "versionCommand": "--version",
   "release": {
     "status": "source-only",
     "features": [
@@ -19,5 +13,6 @@
       "rocks"
     ],
     "enterpriseFeatures": false
-  }
+  },
+  "legalNotices": "kmj/UPSTREAM-NOTICES.md"
 }
