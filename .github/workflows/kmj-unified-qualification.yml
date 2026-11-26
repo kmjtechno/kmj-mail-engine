@@ -6,6 +6,8 @@ on:
       - 'kmj/test_qualify_unified.py'
       - 'kmj/UNIFIED-MAIL.md'
       - '.github/workflows/kmj-unified-qualification.yml'
+  push:
+    branches: [main]
 permissions:
   contents: read
 jobs:

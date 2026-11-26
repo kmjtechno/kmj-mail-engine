@@ -70,24 +70,59 @@ def locate(client, message_id):
     return uids
 
 
-def check_message(client, uid, marker, message_id):
+def check_message(client, uid, marker, message_id, recipient):
     status, data = client.uid("FETCH", uid, "(BODY.PEEK[])")
     require(status == "OK")
     payloads = [p[1] for p in data if isinstance(p, tuple) and len(p) == 2 and isinstance(p[1], bytes)]
     require(len(payloads) == 1 and len(payloads[0]) <= 65536)
     msg = email.message_from_bytes(payloads[0], policy=SMTP)
-    require(msg["Message-ID"] == message_id and msg["To"] == PRIMARY and msg["From"] == SENDER)
+    require(msg["Message-ID"] == message_id and msg["To"] == recipient and msg["From"] == SENDER)
     body = msg.get_body(preferencelist=("plain",))
     require(body is not None and body.get_content().strip() == marker)
 
 
-def run(d):
-    ctx = ssl.create_default_context(cafile=d["ca_file"])
+def witness(recipient):
     marker = "KMJ-qualification-" + secrets.token_hex(16)
     message_id = "<" + marker + "@example.test>"
     msg = EmailMessage(policy=SMTP)
-    msg["From"], msg["To"], msg["Subject"], msg["Message-ID"] = SENDER, PRIMARY, marker, message_id
+    msg["From"], msg["To"], msg["Subject"], msg["Message-ID"] = SENDER, recipient, marker, message_id
     msg.set_content(marker)
+    return marker, message_id, msg.as_bytes()
+
+
+def deny_cross_credentials(client, recipient, other_password):
+    try:
+        status, _ = client.login(recipient, other_password)
+    except imaplib.IMAP4.abort:
+        # Disconnection is not proof of an authentication rejection.
+        raise
+    except imaplib.IMAP4.error as exc:
+        # IMAP4.login raises error on tagged NO. Require an auth failure
+        # response code, not a malformed command or unrelated error.
+        require("[AUTHENTICATIONFAILED]" in str(exc).upper())
+        return
+    require(status == "NO")
+
+
+def check_mailbox(client, recipient, password, own, other):
+    require(client.login(recipient, password)[0] == "OK")
+    require(client.select("INBOX", readonly=True)[0] == "OK")
+    marker, message_id, _ = own
+    deadline = time.monotonic() + 20
+    while True:
+        require(client.noop()[0] == "OK")
+        uids = locate(client, message_id)
+        if uids or time.monotonic() >= deadline:
+            break
+        time.sleep(1)
+    require(len(uids) == 1)
+    check_message(client, uids[0], marker, message_id, recipient)
+    require(locate(client, other[1]) == [])
+
+
+def run(d):
+    ctx = ssl.create_default_context(cafile=d["ca_file"])
+    a, b = witness(PRIMARY), witness(SECONDARY)
     # Literal loopback only. Fixture TLS certificate must contain IP SAN 127.0.0.1.
     with smtplib.SMTP("127.0.0.1", d["smtp_port"], timeout=10) as smtp:
         require(smtp.ehlo()[0] == 250)
@@ -95,25 +130,20 @@ def run(d):
         require(smtp.ehlo()[0] == 250)
         rejected(smtp, UNKNOWN)
         rejected(smtp, RELAY)
-        require(not smtp.sendmail(SENDER, [PRIMARY], msg.as_bytes()))
-    with imaplib.IMAP4_SSL("127.0.0.1", d["imap_port"], ssl_context=ctx, timeout=10) as a:
-        require(a.login(PRIMARY, d["alpha_password"])[0] == "OK")
-        require(a.select("INBOX", readonly=True)[0] == "OK")
-        deadline = time.monotonic() + 20
-        while True:
-            a.noop()
-            uids = locate(a, message_id)
-            if uids or time.monotonic() >= deadline:
-                break
-            time.sleep(1)
-        require(len(uids) == 1)
-        check_message(a, uids[0], marker, message_id)
-    with imaplib.IMAP4_SSL("127.0.0.1", d["imap_port"], ssl_context=ctx, timeout=10) as b:
-        require(b.login(SECONDARY, d["beta_password"])[0] == "OK")
-        require(b.select("INBOX", readonly=True)[0] == "OK")
-        require(locate(b, message_id) == [])
+        require(not smtp.sendmail(SENDER, [PRIMARY], a[2]))
+        require(not smtp.sendmail(SENDER, [SECONDARY], b[2]))
+    for recipient, password, other_password, own, other in (
+        (PRIMARY, d["alpha_password"], d["beta_password"], a, b),
+        (SECONDARY, d["beta_password"], d["alpha_password"], b, a),
+    ):
+        with imaplib.IMAP4_SSL("127.0.0.1", d["imap_port"], ssl_context=ctx, timeout=10) as client:
+            deny_cross_credentials(client, recipient, other_password)
+        with imaplib.IMAP4_SSL("127.0.0.1", d["imap_port"], ssl_context=ctx, timeout=10) as client:
+            check_mailbox(client, recipient, password, own, other)
     return {"smtp_tls": "PASS", "unknown_recipient": "PASS", "unauthorized_relay": "PASS",
-            "smtp_to_imap": "PASS", "recipient_identity": "PASS", "second_account_inbox_absence": "PASS",
+            "smtp_to_imap": "PASS", "recipient_identity": "PASS",
+            "two_account_delivery": "PASS", "cross_account_inbox_absence": "PASS",
+            "cross_account_password_rejection": "PASS",
             "scope": "ISOLATED_SYNTHETIC_ONLY", "production_ready": False}
 
 

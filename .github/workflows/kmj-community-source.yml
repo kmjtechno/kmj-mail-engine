@@ -5,6 +5,8 @@ on:
       - 'kmj/**'
       - 'crates/main/src/main.rs'
       - '.github/workflows/kmj-community-source.yml'
+  push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
