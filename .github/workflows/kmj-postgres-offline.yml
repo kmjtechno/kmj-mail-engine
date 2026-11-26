@@ -1,0 +1,21 @@
+name: KMJ PostgreSQL bootstrap offline contract
+on:
+  push:
+    branches:
+      - feat/isolated-postgres-bootstrap-20261126
+  pull_request:
+    paths:
+      - 'kmj/bootstrap-postgres.py'
+      - 'kmj/test_bootstrap_postgres.py'
+      - '.github/workflows/kmj-postgres-offline.yml'
+permissions:
+  contents: read
+jobs:
+  postgres-offline-contract:
+    if: github.repository == 'kmjtechno/kmj-mail-engine'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -B -m unittest discover -s kmj -p test_bootstrap_postgres.py -v

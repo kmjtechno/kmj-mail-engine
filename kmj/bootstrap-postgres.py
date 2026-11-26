@@ -11,6 +11,7 @@ import http.client
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import signal
 import socket
@@ -55,7 +56,33 @@ def private_run(argv, env, cwd, log, timeout=45):
                           stdout=log, stderr=log, check=True, timeout=timeout)
 
 
+def strict_object(pairs):
+    result = {}
+    for k, v in pairs:
+        require(k not in result)
+        result[k] = v
+    return result
+
+
+def reject_constant(_):
+    raise ValueError("non-JSON numeric constant")
+
+
+def parse_response(raw, method):
+    result = json.loads(raw, object_pairs_hook=strict_object,
+                        parse_constant=reject_constant)
+    require(isinstance(result, dict))
+    calls = result.get("methodResponses")
+    require(isinstance(calls, list) and len(calls) == 1
+            and isinstance(calls[0], list) and len(calls[0]) == 3
+            and calls[0][0] == method and calls[0][2] == "bootstrap"
+            and isinstance(calls[0][1], dict))
+    return calls[0][1]
+
+
 def rpc(port, token, method, args):
+    require(type(port) is int and 1024 <= port <= 65535)
+    require(method in ("x:Bootstrap/get", "x:Bootstrap/set"))
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=40)
     try:
         payload = {"using": [CORE, REGISTRY],
@@ -70,13 +97,7 @@ def rpc(port, token, method, args):
         require(response.getheader("Content-Encoding", "identity").lower() == "identity")
         raw = response.read(262145)
         require(len(raw) <= 262144)
-        result = json.loads(raw)
-        calls = result.get("methodResponses")
-        require(isinstance(calls, list) and len(calls) == 1
-                and isinstance(calls[0], list) and len(calls[0]) == 3
-                and calls[0][0] == method and calls[0][2] == "bootstrap"
-                and isinstance(calls[0][1], dict))
-        return calls[0][1]
+        return parse_response(raw, method)
     finally:
         conn.close()
 
@@ -87,7 +108,7 @@ def bootstrap(port, token, pg_port, root):
     require(isinstance(rows, list) and len(rows) == 1
             and isinstance(rows[0], dict) and not current.get("notFound"))
     sid = rows[0].get("id")
-    require(isinstance(sid, str) and 1 <= len(sid) <= 255)
+    require(isinstance(sid, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,255}", sid))
     # Explicitly avoid upstream default ACME/DKIM work and /var/log paths.
     patch = {
         "defaultHostname": "mail." + DOMAIN,
@@ -103,8 +124,8 @@ def bootstrap(port, token, pg_port, root):
                    "enable": False},
     }
     result = rpc(port, token, "x:Bootstrap/set", {"update": {sid: patch}})
-    require(not result.get("notUpdated") and not result.get("notCreated")
-            and not result.get("notDestroyed"))
+    for key in ("notUpdated", "notCreated", "notDestroyed", "created", "destroyed"):
+        require(key not in result or result[key] in ({}, [], None))
     updated = result.get("updated")
     require(isinstance(updated, dict) and set(updated) == {sid})
     # The upstream bootstrap response may contain the generated administrator
@@ -169,7 +190,11 @@ def run(binary, pgdir, expected_sha):
                 st = conf.stat()
                 require(stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid()
                         and stat.S_IMODE(st.st_mode) == 0o600)
-                config = json.loads(conf.read_text())
+                raw_config = conf.read_bytes()
+                require(len(raw_config) <= 16384)
+                config = json.loads(raw_config, object_pairs_hook=strict_object,
+                                    parse_constant=reject_constant)
+                require(isinstance(config, dict))
                 require(config.get("@type") == "PostgreSql"
                         and config.get("host") == "127.0.0.1"
                         and config.get("port") == pg_port
