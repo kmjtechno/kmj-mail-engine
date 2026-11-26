@@ -1,4 +1,5 @@
 import importlib.util
+import imaplib
 import json
 import os
 from pathlib import Path
@@ -57,6 +58,45 @@ class QualificationContract(unittest.TestCase):
             c.uid.return_value = result
             with self.assertRaises(ValueError):
                 q.locate(c, "<fixture@example.test>")
+
+    def test_cross_credentials_fail_closed(self):
+        c = Mock()
+        c.login.return_value = ("OK", [b"unexpected"])
+        with self.assertRaises(ValueError):
+            q.deny_cross_credentials(c, q.PRIMARY, "wrong-password")
+        c.login.side_effect = imaplib.IMAP4.abort("connection lost")
+        with self.assertRaises(imaplib.IMAP4.abort):
+            q.deny_cross_credentials(c, q.PRIMARY, "wrong-password")
+        c.login.side_effect = imaplib.IMAP4.error("BAD command")
+        with self.assertRaises(ValueError):
+            q.deny_cross_credentials(c, q.PRIMARY, "wrong-password")
+        c.login.side_effect = imaplib.IMAP4.error("[AUTHENTICATIONFAILED] Invalid credentials")
+        q.deny_cross_credentials(c, q.PRIMARY, "wrong-password")
+
+    def test_message_recipient_and_content(self):
+        marker, message_id, raw = q.witness(q.SECONDARY)
+        c = Mock()
+        c.uid.return_value = ("OK", [(b"1 BODY[]", raw)])
+        q.check_message(c, b"1", marker, message_id, q.SECONDARY)
+        with self.assertRaises(ValueError):
+            q.check_message(c, b"1", marker, message_id, q.PRIMARY)
+        with self.assertRaises(ValueError):
+            q.check_message(c, b"1", "wrong marker", message_id, q.SECONDARY)
+
+    def test_mailbox_rejects_cross_account_message(self):
+        own = q.witness(q.PRIMARY)
+        other = q.witness(q.SECONDARY)
+        c = Mock()
+        c.login.return_value = ("OK", [b"ok"])
+        c.select.return_value = ("OK", [b"2"])
+        c.noop.return_value = ("OK", [b"ok"])
+        c.uid.side_effect = [
+            ("OK", [b"1"]),
+            ("OK", [(b"1 BODY[]", own[2])]),
+            ("OK", [b"2"]),
+        ]
+        with self.assertRaises(ValueError):
+            q.check_mailbox(c, q.PRIMARY, "test-password", own, other)
 
 
 if __name__ == "__main__":

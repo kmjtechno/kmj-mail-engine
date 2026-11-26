@@ -8,6 +8,8 @@ on:
       - 'Cargo.lock'
       - '.cargo/**'
       - '.github/workflows/kmj-community-build.yml'
+  push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,6 +40,7 @@ jobs:
           cargo -V
       - name: Build and verify actual KMJ Community executable
         run: |
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
           bash kmj/build-community.sh
           test "$(target/kmj-community/kmj-mail-engine --version)" = "KMJ Mail Engine 1.2.0"
           test "$(target/kmj-community/kmj-mail-engine --kmj-version)" = "KMJ Mail Engine 1.2.0"
