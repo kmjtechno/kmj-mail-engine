@@ -1,0 +1,21 @@
+name: KMJ isolated JMAP qualification contract
+on:
+  pull_request:
+    paths:
+      - 'kmj/qualify-jmap.py'
+      - 'kmj/test_qualify_jmap.py'
+      - 'kmj/JMAP-QUALIFICATION.md'
+      - '.github/workflows/kmj-jmap-qualification.yml'
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  jmap-offline-contract:
+    if: github.repository == 'kmjtechno/kmj-mail-engine'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -B -m unittest discover -s kmj -p test_qualify_jmap.py -v

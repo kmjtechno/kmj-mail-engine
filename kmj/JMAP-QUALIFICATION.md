@@ -1,0 +1,7 @@
+# Isolated JMAP mailbox acceptance
+
+Use a disposable Community instance in an isolated network namespace with no production credentials, storage or egress. Configure distinct high loopback SMTP STARTTLS and JMAP HTTPS ports, TLS certificate with IP SAN 127.0.0.1 and a private test CA, two unshared test accounts alpha@kmj-qualification.test and beta@kmj-qualification.test with separate random passwords and Basic auth permitted for the fixture. Only run unprivileged. Keep an owner-mode-0600 JSON fixture with exactly smtp_port, jmap_port, alpha_password, beta_password and ca_file. Run:
+
+    python3 kmj/qualify-jmap.py /path/to/private-fixture.json --confirm DISPOSABLE_KMJ_TEST_ACCOUNTS_ONLY
+
+The script sends one unique synthetic message to each account and checks authenticated session primary-account separation, actual Email/query and Email/get identity, reciprocal query absence and explicit account-level denial of cross-account Email/get. It uses verified HTTPS, no redirects, literal loopback, fixed paths, bounded JSON, and never outputs secrets, raw responses or mailbox content. It leaves only synthetic messages in the disposable fixture. Offline CI tests parsing and result guards; this is not a real runtime result. Full SMTP/IMAP/JMAP writes, submission, attachment, quota, persistence/restore, abuse resistance and migration acceptance remain separate. Do not run on production or enable Basic auth there as a result of this document.
