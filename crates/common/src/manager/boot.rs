@@ -42,11 +42,11 @@ pub struct IpcReceivers {
 }
 
 const HELP: &str = concat!(
-    "Stalwart Server v",
+    "KMJ Mail Engine v",
     env!("CARGO_PKG_VERSION"),
     r#"
 
-Usage: stalwart [OPTIONS]
+Usage: kmj-mail-engine [OPTIONS]
 
 Options:
   -c, --config <PATH>              Start server with the specified configuration file

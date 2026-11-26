@@ -42,4 +42,12 @@ jobs:
           test "$(target/kmj-community/kmj-mail-engine --version)" = "KMJ Mail Engine 1.2.0"
           test "$(target/kmj-community/kmj-mail-engine --kmj-version)" = "KMJ Mail Engine 1.2.0"
           sha256sum target/kmj-community/kmj-mail-engine
+          help="$(target/kmj-community/kmj-mail-engine --help 2>&1)"
+          grep -Fq 'KMJ Mail Engine v' <<< "$help"
+          grep -Fq 'Usage: kmj-mail-engine [OPTIONS]' <<< "$help"
+          if grep -iq stalwart <<< "$help"; then
+            echo 'KMJ_HELP_BRANDING=FAIL'
+            exit 2
+          fi
+          echo 'KMJ_HELP_BRANDING=PASS'
           echo 'KMJ_CANDIDATE_BINARY=BUILT_NOT_SIGNED_NOT_DEPLOYED'
