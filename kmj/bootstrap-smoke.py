@@ -37,7 +37,7 @@ def isolated():
                     if line.strip()), "IPV6_ROUTES")
 
 
-def http(port, path):
+def http_get(port, path):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
     try:
         conn.request("GET", path)
@@ -82,7 +82,8 @@ def run(binary):
                     if proc.poll() is not None:
                         # Fixed classification only; log lines may contain credentials.
                         log.flush()
-                        raw = log_path.read_bytes()[:65536].lower()
+                        with log_path.open("rb") as private_log:
+                            raw = private_log.read(65536).lower()
                         for marker, category in (
                             (b"unsupported database schema version", "SCHEMA_VERSION"),
                             (b"permission denied", "PERMISSION"),
@@ -94,7 +95,7 @@ def run(binary):
                                 raise SmokeFailure("PROCESS_EXIT_" + category)
                         raise SmokeFailure("PROCESS_EXIT_UNCLASSIFIED")
                     try:
-                        status, location, _ = http(port, "/.well-known/jmap")
+                        status, location, _ = http_get(port, "/.well-known/jmap")
                     except (OSError, http.client.HTTPException):
                         require(time.monotonic() < deadline, "LISTENER_TIMEOUT")
                         time.sleep(0.5)
@@ -102,7 +103,7 @@ def run(binary):
                     require(status == 307, "DISCOVERY_HTTP_" + str(status))
                     require(location == "/jmap/session", "DISCOVERY_LOCATION")
                     break
-                status, _, body = http(port, "/jmap/session")
+                status, _, body = http_get(port, "/jmap/session")
                 require(status == 200, "SESSION_HTTP_" + str(status))
                 try:
                     session = json.loads(body)

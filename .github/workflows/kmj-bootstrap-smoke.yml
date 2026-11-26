@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'kmj/bootstrap-smoke.py'
+      - 'kmj/test_bootstrap_smoke.py'
       - '.github/workflows/kmj-bootstrap-smoke.yml'
   workflow_dispatch:
 permissions:
@@ -20,6 +21,8 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify actual loopback HTTP helper before compilation
+        run: python3 -B -m unittest discover -s kmj -p test_bootstrap_smoke.py -v
       - name: Compile locked Community executable
         run: |
           sudo apt-get update
