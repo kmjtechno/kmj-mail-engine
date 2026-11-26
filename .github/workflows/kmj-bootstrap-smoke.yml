@@ -1,0 +1,37 @@
+name: KMJ isolated Community bootstrap smoke
+on:
+  pull_request:
+    paths:
+      - 'kmj/bootstrap-smoke.py'
+      - '.github/workflows/kmj-bootstrap-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kmj-bootstrap-smoke-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  isolated-runtime:
+    if: github.repository == 'kmjtechno/kmj-mail-engine'
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Compile locked Community executable
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake clang libclang-dev pkg-config nasm iproute2 util-linux
+          rustup update stable
+          rustup default stable
+          bash kmj/build-community.sh
+      - name: Execute disposable isolated bootstrap
+        run: |
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+          sudo unshare --net --fork /bin/bash -c '
+            set -euo pipefail
+            ip link set lo up
+            exec runuser -u "$1" -- env -i PATH=/usr/bin:/bin /usr/bin/python3 -B "$2" "$3"
+          ' kmj "$(id -un)" "$PWD/kmj/bootstrap-smoke.py" "$PWD/target/kmj-community/kmj-mail-engine"
