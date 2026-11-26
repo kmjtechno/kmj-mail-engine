@@ -136,12 +136,14 @@ def bootstrap(port, token, pg_port, root):
 
 
 def run(binary, pgdir, expected_sha):
+    print('KMJ_PG_STAGE=NAMESPACE_PREFLIGHT', flush=True)
     check_namespace()
     binary = binary.resolve(strict=True)
     pgdir = pgdir.resolve(strict=True)
     require(binary.is_file() and os.access(binary, os.X_OK))
     with binary.open("rb") as f:
         require(hashlib.file_digest(f, "sha256").hexdigest() == expected_sha)
+    print('KMJ_PG_STAGE=BINARY_VERIFIED', flush=True)
     for name in ("initdb", "pg_ctl", "createdb", "psql"):
         require((pgdir / name).is_file() and os.access(pgdir / name, os.X_OK))
     with tempfile.TemporaryDirectory(prefix="kmj-pg-bootstrap-") as tmp:
@@ -159,6 +161,7 @@ def run(binary, pgdir, expected_sha):
                       "STALWART_RECOVERY_ADMIN": "admin:" + recovery_password}
         with (root / "private-pg.log").open("xb") as log, \
                 (root / "private-engine.log").open("xb") as engine_log:
+            print("KMJ_PG_STAGE=INITDB", flush=True)
             private_run([str(pgdir / "initdb"), "-D", str(pgdata), "-U", ROLE,
                          "--auth-local=trust", "--auth-host=trust", "--no-locale",
                          "--encoding=UTF8"], env, root, log, 90)
@@ -167,12 +170,14 @@ def run(binary, pgdir, expected_sha):
             options = f"-h 127.0.0.1 -p {pg_port} -k {root}"
             started, proc = False, None
             try:
+                print("KMJ_PG_STAGE=POSTGRES_START", flush=True)
                 private_run([str(pgdir / "pg_ctl"), "-D", str(pgdata), "-l",
                              str(root / "postgres.log"), "-o", options, "-w", "start"],
                             env, root, log, 60)
                 started = True
                 db_args = ["-h", "127.0.0.1", "-p", str(pg_port), "-U", ROLE]
                 private_run([str(pgdir / "createdb"), *db_args, DB], env, root, log)
+                print("KMJ_PG_STAGE=ENGINE_START", flush=True)
                 proc = subprocess.Popen([str(binary), "--config", str(conf)], cwd=root,
                                         env=engine_env, stdin=subprocess.DEVNULL,
                                         stdout=engine_log, stderr=engine_log,
@@ -186,7 +191,9 @@ def run(binary, pgdir, expected_sha):
                     except OSError:
                         require(time.monotonic() < deadline)
                         time.sleep(0.5)
+                print("KMJ_PG_STAGE=REGISTRY_BOOTSTRAP", flush=True)
                 bootstrap(http_port, token, pg_port, root)
+                print("KMJ_PG_STAGE=CONFIG_READBACK", flush=True)
                 st = conf.stat()
                 require(stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid()
                         and stat.S_IMODE(st.st_mode) == 0o600)
@@ -199,12 +206,14 @@ def run(binary, pgdir, expected_sha):
                         and config.get("host") == "127.0.0.1"
                         and config.get("port") == pg_port
                         and config.get("database") == DB)
+                print("KMJ_PG_STAGE=TABLES_READBACK", flush=True)
                 p = subprocess.run([str(pgdir / "psql"), *db_args, "-d", DB,
                                     "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1",
                                     "-c", "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'"],
                                    cwd=root, env=env, stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=log, timeout=20, check=True)
                 require(p.stdout.strip().isdigit() and int(p.stdout.strip()) > 0)
+                print("KMJ_PG_STAGE=SHUTDOWN", flush=True)
                 proc.send_signal(signal.SIGTERM)
                 require(proc.wait(timeout=15) == 0)
             finally:

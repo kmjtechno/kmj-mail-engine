@@ -1,0 +1,45 @@
+name: KMJ isolated PostgreSQL runtime
+on:
+  push:
+    branches:
+      - feat/isolated-postgres-bootstrap-20261126
+    paths:
+      - 'kmj/bootstrap-postgres.py'
+      - '.github/workflows/kmj-postgres-runtime.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kmj-postgres-runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  postgres-runtime:
+    if: github.repository == 'kmjtechno/kmj-mail-engine' && github.ref == 'refs/heads/feat/isolated-postgres-bootstrap-20261126'
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Prepare disposable build and database tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake clang libclang-dev pkg-config nasm iproute2 util-linux postgresql
+          rustup update stable
+          rustup default stable
+      - name: Compile exact Community candidate
+        run: |
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+          bash kmj/build-community.sh
+      - name: Run isolated PostgreSQL bootstrap
+        run: |
+          bin="$PWD/target/kmj-community/kmj-mail-engine"
+          hash="$(sha256sum "$bin" | cut -d' ' -f1)"
+          pg="$(pg_config --bindir)"
+          test -x "$pg/initdb"
+          sudo unshare --net --fork /bin/bash -c '
+            set -euo pipefail
+            ip link set lo up
+            exec runuser -u "$1" -- env -i PATH=/usr/bin:/bin /usr/bin/python3 -B "$2" "$3" "$4" --sha256 "$5" --confirm FRESH_ISOLATED_POSTGRES_FIXTURE_ONLY
+          ' kmj "$(id -un)" "$PWD/kmj/bootstrap-postgres.py" "$bin" "$pg" "$hash"
