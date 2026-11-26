@@ -1,0 +1,19 @@
+name: KMJ isolated protocol qualification contract
+on:
+  pull_request:
+    paths:
+      - 'kmj/qualify-unified.py'
+      - 'kmj/test_qualify_unified.py'
+      - 'kmj/UNIFIED-MAIL.md'
+      - '.github/workflows/kmj-unified-qualification.yml'
+permissions:
+  contents: read
+jobs:
+  offline-contract:
+    if: github.repository == 'kmjtechno/kmj-mail-engine'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s kmj -p test_qualify_unified.py -v
