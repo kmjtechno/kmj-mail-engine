@@ -23,6 +23,19 @@ SENDER = "sender@example.test"
 RELAY = "relay@example.invalid"
 
 
+def strict_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate fixture field")
+        result[key] = value
+    return result
+
+
+def reject_constant(_):
+    raise ValueError("invalid JSON constant")
+
+
 def config(path):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "rb") as f:
@@ -32,7 +45,8 @@ def config(path):
         raw = f.read(8193)
     if len(raw) > 8192:
         raise ValueError("fixture too large")
-    d = json.loads(raw)
+    d = json.loads(raw, object_pairs_hook=strict_object,
+                   parse_constant=reject_constant)
     if not isinstance(d, dict) or set(d) != {"smtp_port", "imap_port", "alpha_password", "beta_password", "ca_file"}:
         raise ValueError("fixture schema")
     for name in ("smtp_port", "imap_port"):
@@ -101,7 +115,9 @@ def deny_cross_credentials(client, recipient, other_password):
         # response code, not a malformed command or unrelated error.
         require("[AUTHENTICATIONFAILED]" in str(exc).upper())
         return
-    require(status == "NO")
+    # Real imaplib raises on tagged NO. A bare return is not explicit
+    # authentication-failure evidence; fail closed for unexpected adapters.
+    raise ValueError("missing explicit authentication failure")
 
 
 def check_mailbox(client, recipient, password, own, other):
@@ -121,6 +137,7 @@ def check_mailbox(client, recipient, password, own, other):
 
 
 def run(d):
+    require(os.geteuid() != 0)
     ctx = ssl.create_default_context(cafile=d["ca_file"])
     a, b = witness(PRIMARY), witness(SECONDARY)
     # Literal loopback only. Fixture TLS certificate must contain IP SAN 127.0.0.1.
